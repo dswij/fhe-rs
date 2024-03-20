@@ -7,3 +7,10 @@ edition = "2021"
 
 [dependencies]
 num = "*"
+
+[dev-dependencies]
+criterion = { version = "0.4", features = ["html_reports"] }
+
+[[bench]]
+name = "dft"
+harness = false
