@@ -53,6 +53,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
+name = "cc"
+version = "1.0.90"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8cd6604a82acf3039f1144f54b8eb34e91ffba622051189e71b781822d5ee1f5"
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -104,6 +110,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
 dependencies = [
  "os_str_bytes",
+]
+
+[[package]]
+name = "cmake"
+version = "0.1.50"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a31c789563b815f77f4250caee12365734369f942439b7defd71e18a48197130"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
@@ -184,6 +199,10 @@ name = "fhe-rs"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "lapack-src",
+ "lapack-sys",
+ "lapacke",
+ "netlib-src",
  "num",
 ]
 
@@ -247,6 +266,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "lapack-src"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a960a9d20df9abedf2e136c087c8fcc29f693ed985349bb03fe00816de8b00d2"
+dependencies = [
+ "netlib-src",
+]
+
+[[package]]
+name = "lapack-sys"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "447f56c85fb410a7a3d36701b2153c1018b1d2b908c5fbaf01c1b04fac33bcbe"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "lapacke"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8425aee3cfc69f1e907f8487a291d1ddebfd0db2d74493b4e443be0618648744"
+dependencies = [
+ "lapacke-sys",
+ "libc",
+ "num-complex",
+]
+
+[[package]]
+name = "lapacke-sys"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f7d0817c6f4a6029f3b153de01d6498dcf9df659a7536c58bd8df5cd3ccaa6e"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -269,6 +326,15 @@ name = "memchr"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "523dc4f511e55ab87b694dc30d0f820d60906ef06413f93d4d7a1385599cc149"
+
+[[package]]
+name = "netlib-src"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39f41f36bb4d46906d5a72da5b73a804d9de1a7282eb7c89617201acda7b8212"
+dependencies = [
+ "cmake",
+]
 
 [[package]]
 name = "num"
