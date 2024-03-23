@@ -7,6 +7,11 @@ edition = "2021"
 
 [dependencies]
 num = "*"
+# lapacke = "*"
+lapack-sys = "*"
+netlib-src = "*"
+lapacke = "*"
+lapack-src = { version = "*", features = ["netlib"] }
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }
