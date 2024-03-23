@@ -1,4 +1,57 @@
-use lapacke::{dgesv, Layout};
+use lapacke::{dgesv, zgesv, Layout};
+use num::Complex;
+
+// TODO: use macros to make it generic i guess
+pub fn map_domain(
+    x: Vec<Complex<f64>>,
+    old: Vec<Complex<f64>>,
+    new: Vec<Complex<f64>>,
+) -> Vec<Complex<f64>>
+where
+{
+    let offset = (old[1] * new[0] - old[0] * new[1]) / (old[1] - old[0]);
+    let scl = (new[1] - new[0]) / (old[1] - old[0]);
+
+    x.into_iter().map(|e| offset + scl * e).collect()
+}
+
+// TODO: make this generic instead
+pub fn try_solve_complex(
+    A: Vec<Vec<Complex<f64>>>,
+    B: Vec<Vec<Complex<f64>>>,
+) -> Result<Vec<Vec<Complex<f64>>>, String> {
+    let n: i32 = A[0].len().try_into().unwrap();
+    let nrhs: i32 = B[0].len().try_into().unwrap();
+
+    let mut a: Vec<_> = A.into_iter().flatten().collect();
+    let mut b: Vec<_> = B.into_iter().flatten().collect();
+    let mut x = vec![0; n as usize];
+
+    let info: i32;
+    unsafe {
+        info = zgesv(Layout::RowMajor, n, nrhs, &mut a, n, &mut x, &mut b, nrhs);
+    }
+
+    if info == 0 {
+        let nrhs: usize = nrhs as usize;
+        let n: usize = n as usize;
+        let mut result = Vec::with_capacity(n);
+        for i in 0..n {
+            let mut row = Vec::with_capacity(nrhs);
+            for j in 0..nrhs {
+                row.push(b[i as usize * nrhs + j as usize]);
+            }
+
+            result.push(row);
+        }
+
+        Ok(result)
+    } else if info < 0 {
+        Err(format!("Argument {} is invalid", info))
+    } else {
+        Err(format!("U({}, {}) is zero", info, info))
+    }
+}
 
 pub fn try_solve(A: Vec<Vec<f64>>, B: Vec<Vec<f64>>) -> Result<Vec<Vec<f64>>, String> {
     let n: i32 = A[0].len().try_into().unwrap();

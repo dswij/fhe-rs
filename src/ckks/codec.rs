@@ -2,6 +2,7 @@ use num::Complex;
 use std::f64::consts::PI;
 use std::str::FromStr;
 
+use crate::linarg::try_solve_complex;
 use crate::poly::Polynomial;
 
 pub struct Codec {
@@ -13,12 +14,33 @@ impl Codec {
         Self { M }
     }
 
-    pub fn encode(&self, b: Vec<i64>) -> Polynomial<f64> {
-        todo!()
+    // TODO: implement scaler etc
+    pub fn encode(&self, b: Vec<i64>) -> Polynomial<Complex<f64>> {
+        let b = b
+            .into_iter()
+            .map(|e| vec![Complex::new(e as f64, 0.0)])
+            .collect();
+        let xi = Complex::from_polar(1.0, 2.0 * PI / (self.M as f64));
+        let vandermonde = vandermonde(xi, self.M);
+
+        let coef = try_solve_complex(vandermonde, b)
+            .unwrap()
+            .into_iter()
+            .flatten()
+            .collect();
+
+        Polynomial::new(coef)
     }
 
-    pub fn decode(&self, p: Polynomial<f64>) -> Vec<i64> {
-        todo!()
+    pub fn decode(&self, p: Polynomial<Complex<f64>>) -> Vec<Complex<f64>> {
+        let xi = Complex::from_polar(1.0, 2.0 * PI / self.M as f64);
+
+        (0..self.M / 2)
+            .map(|i| {
+                let root = xi.powi((2 * i + 1).try_into().unwrap());
+                p.eval(root)
+            })
+            .collect()
     }
 }
 
@@ -84,4 +106,22 @@ mod test {
 
         assert_eq!(result, expected);
     }
+
+    // TODO: encode/decode test
+    //
+    #[test]
+    fn test_encode() {
+        let input = vec![1, 2, 3, 4];
+        let codec = Codec::new(8);
+        let encoded = codec.encode(input);
+
+        dbg!(&encoded);
+
+        let decoded = codec.decode(encoded);
+        dbg!(&decoded);
+        assert!(false);
+    }
+
+    #[test]
+    fn test_decode() {}
 }
