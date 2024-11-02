@@ -1,5 +1,6 @@
 use lapacke::{dgesv, zgesv, Layout};
 use num::Complex;
+use num::FromPrimitive;
 
 // TODO: use macros to make it generic i guess
 pub fn map_domain(
@@ -25,7 +26,10 @@ pub fn try_solve_complex(
 
     let mut a: Vec<_> = A.into_iter().flatten().collect();
     let mut b: Vec<_> = B.into_iter().flatten().collect();
-    let mut x = vec![0; n as usize];
+    let mut x = vec![1; n as usize];
+
+    dbg!(&a);
+    dbg!(&b);
 
     let info: i32;
     unsafe {
@@ -44,6 +48,8 @@ pub fn try_solve_complex(
 
             result.push(row);
         }
+
+        dbg!(&result);
 
         Ok(result)
     } else if info < 0 {
@@ -103,6 +109,41 @@ mod test {
             .zip(expected.into_iter())
             .map(|(a, b)| {
                 assert!((a - b).abs() < 1e-10);
+            });
+    }
+
+    #[test]
+    fn test_zgesv() {
+        let A = vec![vec![1.0, 2.0], vec![3.0, 5.0]];
+        let B = vec![vec![1.0], vec![2.0]];
+
+        // TODO: monstrosity
+        let A = A
+            .into_iter()
+            .map(|e| {
+                e.into_iter()
+                    .map(|e| Complex::<f64>::from_f64(e).unwrap())
+                    .collect()
+            })
+            .collect();
+        let B = B
+            .into_iter()
+            .map(|e| {
+                e.into_iter()
+                    .map(|e| Complex::<f64>::from_f64(e).unwrap())
+                    .collect()
+            })
+            .collect();
+
+        let result = try_solve_complex(A, B).unwrap();
+        let expected: Vec<f64> = vec![-1.0, 1.0];
+
+        result
+            .into_iter()
+            .flatten()
+            .zip(expected.into_iter())
+            .map(|(a, b)| {
+                assert!((a - b).re.abs() < 1e-10);
             });
     }
 }
