@@ -2,37 +2,54 @@ use num::Complex;
 use std::f64::consts::PI;
 use std::str::FromStr;
 
-use crate::linarg::try_solve_complex;
+use nalg::DMatrix;
+use nalg::LU;
+
 use crate::poly::Polynomial;
 
 pub struct Codec {
     M: i64,
+    scale: f64,
+    xi: Complex<f64>,
+    basis: Vec<Complex<f64>>,
 }
 
 impl Codec {
-    pub fn new(M: i64) -> Self {
-        Self { M }
+    pub fn new(M: i64, scale: f64) -> Self {
+        let xi = Complex::from_polar(1.0, 2.0 * PI / (M as f64));
+        let vandermonde = vandermonde(xi, M);
+
+        let n = (M / 2) as usize;
+        let basis = DMatrix::from_vec(n, n, vandermonde).transpose().data.into();
+
+        Self {
+            M,
+            scale,
+            xi,
+            basis,
+        }
     }
 
-    // TODO: implement scaler etc
     pub fn encode(&self, b: Vec<i64>) -> Polynomial<Complex<f64>> {
-        let b = b
-            .into_iter()
-            .map(|e| vec![Complex::new(e as f64, 0.0)])
-            .collect();
-        let xi = Complex::from_polar(1.0, 2.0 * PI / (self.M as f64));
-        let vandermonde = vandermonde(xi, self.M);
-
-        let coef = try_solve_complex(vandermonde, b)
-            .unwrap()
-            .into_iter()
-            .flatten()
-            .collect();
-
-        Polynomial::new(coef)
+        self.sigma_inverse(b)
     }
 
     pub fn decode(&self, p: Polynomial<Complex<f64>>) -> Vec<Complex<f64>> {
+        self.sigma(p)
+    }
+
+    fn sigma_inverse(&self, b: Vec<i64>) -> Polynomial<Complex<f64>> {
+        let n: usize = (self.M / 2) as usize;
+        let b: Vec<_> = b.into_iter().map(|e| Complex::new(e as f64, 0.0)).collect();
+        let xi = Complex::from_polar(1.0, 2.0 * PI / (self.M as f64));
+        let vandermonde = vandermonde(xi, self.M);
+        let lu = LU::new(DMatrix::from_row_slice(n, n, &vandermonde));
+        let coef = lu.solve(&DMatrix::from_vec(n, 1, b)).unwrap();
+
+        Polynomial::new(coef.data.into())
+    }
+
+    fn sigma(&self, p: Polynomial<Complex<f64>>) -> Vec<Complex<f64>> {
         let xi = Complex::from_polar(1.0, 2.0 * PI / self.M as f64);
 
         (0..self.M / 2)
@@ -42,21 +59,31 @@ impl Codec {
             })
             .collect()
     }
+
+    fn pi(&self, z: Vec<Complex<f64>>) -> Vec<Complex<f64>> {
+        let n = (self.M / 4).try_into().unwrap();
+
+        z.into_iter().take(n).collect()
+    }
+
+    fn pi_inverse(&self, z: Vec<Complex<f64>>) -> Vec<Complex<f64>> {
+        let mut z = z;
+        let z_hat: Vec<Complex<f64>> = z.clone().into_iter().map(|e| e.conj()).collect();
+        z.extend(z_hat);
+
+        z
+    }
 }
 
-pub fn vandermonde(xi: Complex<f64>, M: i64) -> Vec<Vec<Complex<f64>>> {
+pub fn vandermonde(xi: Complex<f64>, M: i64) -> Vec<Complex<f64>> {
     let N = M / 2;
     let mut matrix = Vec::new();
 
     for i in 0..N {
         let root = xi.powi((2 * i + 1).try_into().unwrap());
-        let mut row = Vec::new();
-
         for j in 0..N {
-            row.push(root.powi(j.try_into().unwrap()));
+            matrix.push(root.powi(j.try_into().unwrap()));
         }
-
-        matrix.push(row);
     }
 
     matrix
@@ -95,33 +122,60 @@ mod test {
                 "-0.707106781186549-0.707106781186546j",
             ],
         ];
-        let expected: Vec<Vec<Complex<f64>>> = expected
+        let expected: Vec<Complex<f64>> = expected
             .into_iter()
-            .map(|e| {
+            .flat_map(|e| {
                 e.into_iter()
                     .filter_map(|s| Complex::<f64>::from_str(s).ok())
-                    .collect()
             })
             .collect();
 
         assert_eq!(result, expected);
     }
 
-    // TODO: encode/decode test
-    //
     #[test]
-    fn test_encode() {
+    fn test_encode_decode() {
         let input = vec![1, 2, 3, 4];
-        let codec = Codec::new(8);
-        let encoded = codec.encode(input);
-
-        dbg!(&encoded);
-
+        let codec = Codec::new(8, 1.0);
+        let encoded = codec.encode(input.clone());
         let decoded = codec.decode(encoded);
-        dbg!(&decoded);
-        assert!(false);
+
+        let re_decoded: Vec<_> = decoded.into_iter().map(|e| e.re.round() as i64).collect();
+
+        assert!(re_decoded == input);
     }
 
     #[test]
-    fn test_decode() {}
+    fn test_add() {
+        let input_1 = vec![1, 2, 3, 4];
+        let input_2 = vec![2, 3, 4, 5];
+        let codec = Codec::new(8, 1.0);
+        let sum = codec.encode(input_1) + codec.encode(input_2);
+        let decoded = codec.decode(sum);
+        let re_decoded: Vec<_> = decoded.into_iter().map(|e| e.re.round() as i64).collect();
+
+        assert_eq!(re_decoded, [3, 5, 7, 9]);
+    }
+
+    #[test]
+    fn test_mult() {
+        let input_1 = vec![1, 2, 3, 4];
+        let input_2 = vec![2, 3, 4, 5];
+        let codec = Codec::new(8, 1.0);
+        let sum = codec.encode(input_1) * codec.encode(input_2);
+        let decoded = codec.decode(sum);
+        let re_decoded: Vec<_> = decoded.into_iter().map(|e| e.re.round() as i64).collect();
+
+        assert_eq!(re_decoded, [2, 6, 12, 20]);
+    }
+
+    // #[test]
+    // fn test_pi_inverse() {
+    //     let z = vec![0, 1];
+    //
+    //     let codec = Codec::new(8, 1.0);
+    //
+    //
+    //     assert_eq!(codec.pi_inverse(z), [0, 1, 1, 0]);
+    // }
 }
