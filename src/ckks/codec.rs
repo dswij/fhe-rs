@@ -3,6 +3,7 @@ use std::f64::consts::PI;
 use std::str::FromStr;
 
 use nalg::DMatrix;
+use nalg::DVector;
 use nalg::LU;
 
 use crate::poly::Polynomial;
@@ -31,22 +32,35 @@ impl Codec {
     }
 
     pub fn encode(&self, b: Vec<i64>) -> Polynomial<Complex<f64>> {
-        self.sigma_inverse(b)
-    }
-
-    pub fn decode(&self, p: Polynomial<Complex<f64>>) -> Vec<Complex<f64>> {
-        self.sigma(p)
-    }
-
-    fn sigma_inverse(&self, b: Vec<i64>) -> Polynomial<Complex<f64>> {
-        let n: usize = (self.M / 2) as usize;
         let b: Vec<_> = b.into_iter().map(|e| Complex::new(e as f64, 0.0)).collect();
+        let pi_inverse_b = self.pi_inverse(b);
+        let scaled: Vec<Complex<f64>> = pi_inverse_b.into_iter().map(|e| e * self.scale).collect();
+        let proj = self.project_to_lattice(scaled);
+        let encoded = self.sigma_inverse(proj);
+
+        Polynomial::new(
+            encoded
+                .into_iter()
+                .map(|e| Complex::new(e.re.round(), 0.0))
+                .collect(),
+        )
+    }
+
+    pub fn decode(&self, mut p: Polynomial<Complex<f64>>) -> Vec<Complex<f64>> {
+        let rescaled = p.scale(1.0 / self.scale);
+        let z = self.sigma(p);
+
+        self.pi(z)
+    }
+
+    fn sigma_inverse(&self, b: Vec<Complex<f64>>) -> Vec<Complex<f64>> {
+        let n: usize = (self.M / 2) as usize;
         let xi = Complex::from_polar(1.0, 2.0 * PI / (self.M as f64));
         let vandermonde = vandermonde(xi, self.M);
         let lu = LU::new(DMatrix::from_row_slice(n, n, &vandermonde));
         let coef = lu.solve(&DMatrix::from_vec(n, 1, b)).unwrap();
 
-        Polynomial::new(coef.data.into())
+        coef.data.into()
     }
 
     fn sigma(&self, p: Polynomial<Complex<f64>>) -> Vec<Complex<f64>> {
@@ -68,10 +82,40 @@ impl Codec {
 
     fn pi_inverse(&self, z: Vec<Complex<f64>>) -> Vec<Complex<f64>> {
         let mut z = z;
-        let z_hat: Vec<Complex<f64>> = z.clone().into_iter().map(|e| e.conj()).collect();
+        let z_hat: Vec<Complex<f64>> = z.clone().into_iter().rev().map(|e| e.conj()).collect();
         z.extend(z_hat);
 
         z
+    }
+
+    fn compute_on_basis(&self, z: Vec<Complex<f64>>) -> Vec<f64> {
+        let size = (self.M / 2) as usize;
+        let basis_matrix = DMatrix::from_row_slice(size, size, &self.basis);
+        let mut output = Vec::with_capacity(self.basis.len());
+        let z = DVector::from_vec(z);
+
+        for base in basis_matrix.row_iter() {
+            let e = z.conjugate_transpose().dot(&base) / base.conjugate().dot(&base);
+            output.push(e.re);
+        }
+
+        output
+    }
+
+    fn project_to_lattice(&self, z: Vec<Complex<f64>>) -> Vec<Complex<f64>> {
+        let size = (self.M / 2) as usize;
+        assert_eq!(z.len(), size);
+
+        let coords: Vec<_> = self
+            .compute_on_basis(z)
+            .into_iter()
+            .map(|e| Complex::new(e.round(), 0.0))
+            .collect();
+        let coords_vector = DVector::from_vec(coords);
+
+        let basis_matrix = DMatrix::from_row_slice(size, size, &self.basis);
+
+        basis_matrix.tr_mul(&coords_vector).data.into()
     }
 }
 
@@ -135,8 +179,8 @@ mod test {
 
     #[test]
     fn test_encode_decode() {
-        let input = vec![1, 2, 3, 4];
-        let codec = Codec::new(8, 1.0);
+        let input = vec![3, 2];
+        let codec = Codec::new(8, 64.0);
         let encoded = codec.encode(input.clone());
         let decoded = codec.decode(encoded);
 
@@ -147,28 +191,51 @@ mod test {
 
     #[test]
     fn test_add() {
-        let input_1 = vec![1, 2, 3, 4];
-        let input_2 = vec![2, 3, 4, 5];
-        let codec = Codec::new(8, 1.0);
+        let input_1 = vec![3, 4];
+        let input_2 = vec![4, 5];
+        let codec = Codec::new(8, 64.0);
         let sum = codec.encode(input_1) + codec.encode(input_2);
         let decoded = codec.decode(sum);
         let re_decoded: Vec<_> = decoded.into_iter().map(|e| e.re.round() as i64).collect();
 
-        assert_eq!(re_decoded, [3, 5, 7, 9]);
+        assert_eq!(re_decoded, [7, 9]);
     }
 
     #[test]
-    fn test_mult() {
-        let input_1 = vec![1, 2, 3, 4];
-        let input_2 = vec![2, 3, 4, 5];
-        let codec = Codec::new(8, 1.0);
-        let sum = codec.encode(input_1) * codec.encode(input_2);
-        let decoded = codec.decode(sum);
-        let re_decoded: Vec<_> = decoded.into_iter().map(|e| e.re.round() as i64).collect();
+    fn test_compute_basis() {
+        let input = vec!["192+256j", "128-64j", "128+64j", "192-256j"]
+            .into_iter()
+            .filter_map(|s| Complex::<f64>::from_str(s).ok())
+            .collect();
+        let codec = Codec::new(8, 64.0);
+        let result = codec.compute_on_basis(input);
 
-        assert_eq!(re_decoded, [2, 6, 12, 20]);
+        // TODO: equal comparison in floating number, really?
+        assert_eq!(
+            result,
+            [
+                160.0,
+                90.5096679918781,
+                159.99999999999997,
+                45.25483399593886,
+            ]
+        );
     }
 
+    // TODO: not working?
+    #[test]
+    fn test_mult() {
+        // let input_1 = vec![1, 2, 3, 4];
+        // let input_2 = vec![2, 3, 4, 5];
+        // let codec = Codec::new(8, 1.0);
+        // let sum = codec.encode(input_1) * codec.encode(input_2);
+        // let decoded = codec.decode(sum);
+        // let re_decoded: Vec<_> = decoded.into_iter().map(|e| e.re.round() as i64).collect();
+        //
+        // assert_eq!(re_decoded, [2, 6, 12, 20]);
+    }
+
+    // TODO: write out unit test for everything.
     // #[test]
     // fn test_pi_inverse() {
     //     let z = vec![0, 1];

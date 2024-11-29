@@ -23,6 +23,17 @@ impl Polynomial<Complex<f64>> {
                 acc + coef * x.powu(i.try_into().unwrap())
             })
     }
+
+    pub fn scale<T>(&mut self, x: T)
+    where
+        Complex<f64>: Mul<T, Output = Complex<f64>>,
+        T: Copy,
+    {
+        // TODO: this is too ugly
+        for c in &mut self.coef {
+            *c = *c * x;
+        }
+    }
 }
 
 impl<T: Add<Output = T> + Copy> Add for Polynomial<T> {
