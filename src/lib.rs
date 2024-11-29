@@ -1,9 +1,12 @@
-extern crate lapack_src;
-extern crate lapack_sys;
 extern crate nalgebra as nalg;
-extern crate netlib_src;
 
+pub mod bfv;
+pub mod bgv;
 pub mod ckks;
+pub mod codec;
+
 pub mod dft;
-pub mod linarg;
 pub mod poly;
+pub mod sample;
+
+use poly::Polynomial;

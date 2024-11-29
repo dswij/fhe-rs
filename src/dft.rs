@@ -25,7 +25,8 @@ pub fn fft(w: &[Complex<f64>]) -> Vec<Complex<f64>> {
     result
 }
 
-mod test {
+#[cfg(test)]
+mod tests {
     use super::*;
 
     #[test]
