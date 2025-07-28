@@ -103,6 +103,7 @@ impl Codec {
     }
 
     fn project_to_lattice(&self, z: Vec<Complex<f64>>) -> Vec<Complex<f64>> {
+        dbg!(&z);
         let size = (self.M / 2) as usize;
         assert_eq!(z.len(), size);
 
@@ -225,14 +226,14 @@ mod test {
     // TODO: not working?
     #[test]
     fn test_mult() {
-        // let input_1 = vec![1, 2, 3, 4];
-        // let input_2 = vec![2, 3, 4, 5];
-        // let codec = Codec::new(8, 1.0);
-        // let sum = codec.encode(input_1) * codec.encode(input_2);
-        // let decoded = codec.decode(sum);
-        // let re_decoded: Vec<_> = decoded.into_iter().map(|e| e.re.round() as i64).collect();
-        //
-        // assert_eq!(re_decoded, [2, 6, 12, 20]);
+        let input_1 = vec![1, 2, 3, 4];
+        let input_2 = vec![2, 3, 4, 5];
+        let codec = Codec::new(8, 64.0);
+        let sum = codec.encode(input_1) * codec.encode(input_2);
+        let decoded = codec.decode(sum);
+        let re_decoded: Vec<_> = decoded.into_iter().map(|e| e.re.round() as i64).collect();
+
+        assert_eq!(re_decoded, [2, 6, 12, 20]);
     }
 
     // TODO: write out unit test for everything.

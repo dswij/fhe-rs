@@ -8,10 +8,10 @@ edition = "2021"
 [dependencies]
 num = "*"
 # lapacke = "*"
-lapack-sys = "*"
-netlib-src = "*"
-lapacke = "*"
-lapack-src = { version = "*", features = ["netlib"] }
+# lapack-sys = "*"
+# netlib-src = "*"
+# lapacke = "*"
+# lapack-src = { version = "*", features = ["netlib"] }
 
 nalgebra = "*"
 
