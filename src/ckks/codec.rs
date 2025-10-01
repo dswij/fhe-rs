@@ -1,6 +1,5 @@
 use num::Complex;
 use std::f64::consts::PI;
-use std::str::FromStr;
 
 use nalg::DMatrix;
 use nalg::LU;
@@ -92,8 +91,10 @@ pub fn vandermonde(xi: Complex<f64>, N: usize) -> Vec<Complex<f64>> {
     matrix
 }
 
-mod test {
+#[cfg(test)]
+mod tests {
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn test_vandermonde() {

@@ -1,17 +1,11 @@
 use poly::Polynomial;
 
 extern crate nalgebra as nalg;
-use rand::distr::Uniform;
-use rand::Rng;
 
 pub mod ckks;
 pub mod dft;
 pub mod poly;
 mod session;
-
-use crate::poly::gen_random_polynomial;
-use crate::poly::ring::QuotientRing;
-use crate::poly::ring::ResidualQuotientRing;
 
 // const TEST_MOD: usize = 1024;
 // const QUOTIENT_0: usize = 4096;

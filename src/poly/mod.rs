@@ -104,7 +104,7 @@ impl Polynomial<i64> {
             return (self.clone(), Self::new_empty());
         }
 
-        let mut dim_result = self.coef.len() - rhs.coef.len();
+        let dim_result = self.coef.len() - rhs.coef.len();
         let mut rem = (*self).clone();
         let mut j = rem.coef.len() - 1;
         for i in (0..=dim_result).rev() {

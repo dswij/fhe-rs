@@ -41,7 +41,7 @@ impl ResidualQuotientRing {
     }
 
     pub fn add(&self, lhs: &Polynomial<i64>, rhs: &Polynomial<i64>) -> Polynomial<i64> {
-        let mut result = self.ring.add(lhs, rhs);
+        let result = self.ring.add(lhs, rhs);
         // TODO: fix this
         // let bound = self.bound.try_into().unwrap();
         // result.coef_mod(bound);
@@ -51,7 +51,7 @@ impl ResidualQuotientRing {
     }
 
     pub fn mul(&self, lhs: &Polynomial<i64>, rhs: &Polynomial<i64>) -> Polynomial<i64> {
-        let mut result = self.ring.mul(lhs, rhs);
+        let result = self.ring.mul(lhs, rhs);
         // let bound = self.bound.try_into().unwrap();
         // result.coef_mod(bound);
         // result.translate(-self.t);
