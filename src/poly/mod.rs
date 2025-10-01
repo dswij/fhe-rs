@@ -1,14 +1,14 @@
-use num::complex::ComplexFloat;
 use std::borrow::Borrow;
 use std::borrow::BorrowMut;
 use std::ops::Add;
-use std::ops::AddAssign;
-use std::ops::Div;
 use std::ops::Mul;
 use std::ops::Sub;
 
 use num::Complex;
 
+pub mod ring;
+
+// TODO: Sparse polynomial is probably better off with other representation than a naive vector
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Polynomial<T> {
     pub coef: Vec<T>,
@@ -27,7 +27,7 @@ impl<T> Polynomial<T> {
     where
         T: Clone,
     {
-        let coef = coef.clone().to_vec();
+        let coef = coef.to_vec();
 
         Self { coef }
     }
@@ -37,7 +37,6 @@ impl<T> Polynomial<T> {
         T: Mul<V, Output = T> + Copy,
         V: Copy,
     {
-        // TODO: this is too ugly
         for c in &mut self.coef {
             *c = *c * x;
         }
@@ -61,8 +60,33 @@ impl<T> Polynomial<T> {
         Polynomial::new(product)
     }
 
+    pub fn coef_mul(&self, rhs: &Self) -> Self
+    where
+        T: Mul<T, Output = T> + Copy,
+    {
+        let mut c: Vec<_> = self
+            .coef
+            .iter()
+            .zip(rhs.coef.iter())
+            .map(|(a, b)| *a * *b)
+            .collect();
+
+        let l = std::cmp::min(self.coef.len(), rhs.coef.len());
+        c.extend_from_slice(&self.coef[l..]);
+        c.extend_from_slice(&rhs.coef[l..]);
+
+        Self::new(c)
+    }
+
     pub fn is_zero(&self) -> bool {
         self.coef.len() == 0
+    }
+
+    pub fn max_canon(&self) -> Option<&T>
+    where
+        T: Ord,
+    {
+        self.coef.iter().max()
     }
 }
 
@@ -76,6 +100,10 @@ impl Polynomial<i64> {
         let scaled_coefs: Vec<_> = rhs.coef[..rhs.coef.len() - 1].iter().cloned().collect();
 
         let divisor = Self::new(scaled_coefs).scale(1 / scale_val);
+        if rhs.coef.len() > self.coef.len() {
+            return (self.clone(), Self::new_empty());
+        }
+
         let mut dim_result = self.coef.len() - rhs.coef.len();
         let mut rem = (*self).clone();
         let mut j = rem.coef.len() - 1;
@@ -125,60 +153,6 @@ impl Polynomial<f64> {
     }
 }
 
-impl Polynomial<Complex<f64>> {
-    pub fn eval(&self, x: Complex<f64>) -> Complex<f64> {
-        self.coef
-            .iter()
-            .enumerate()
-            .fold(Complex::new(0.0, 0.0), |acc, (i, &coef)| {
-                acc + coef * x.powu(i.try_into().unwrap())
-            })
-    }
-
-    pub fn rem_euclid(self, rhs: Polynomial<Complex<f64>>) {}
-
-    // TODO: improve this with ref implementation
-    pub fn div_rem(
-        &self,
-        rhs: Polynomial<Complex<f64>>,
-    ) -> (Polynomial<Complex<f64>>, Polynomial<Complex<f64>>) {
-        if self.is_zero() {
-            return (Self::new_empty(), Self::new_empty());
-        }
-
-        let scale_val = rhs.coef[rhs.coef.len() - 1];
-        let scaled_coefs: Vec<_> = rhs.coef[..rhs.coef.len() - 1].iter().cloned().collect();
-
-        let divisor = Self::new(scaled_coefs).scale(scale_val.recip());
-        let mut dim_result = self.coef.len() - rhs.coef.len();
-        let mut rem = (*self).clone();
-        let mut j = rem.coef.len() - 1;
-        for i in (0..=dim_result).rev() {
-            let result = Self::new(rem.coef[i..j].iter().cloned().collect())
-                - divisor.clone().scale(rem.coef[j]);
-
-            (&mut rem.coef[i..j]).copy_from_slice(&result.coef);
-            j -= 1;
-        }
-
-        let res = Polynomial::from_slice(&rem.coef[j + 1..]);
-        let rem = Polynomial::from_slice(&rem.coef[..j + 1]);
-
-        (res.scale(scale_val.recip()), rem)
-    }
-
-    fn trim_zeroes(self) -> Polynomial<Complex<f64>> {
-        let trimmed: Vec<_> = self
-            .coef
-            .into_iter()
-            .rev()
-            .skip_while(|e| *e == Complex::new(0.0, 0.0))
-            .collect();
-
-        Self::new(trimmed)
-    }
-}
-
 impl<T: Add<Output = T> + Copy> Add for Polynomial<T> {
     type Output = Self;
 
@@ -197,6 +171,27 @@ impl<T: Add<Output = T> + Copy> Add for Polynomial<T> {
         }
 
         Self { coef: sum }
+    }
+}
+
+impl<T: Add<Output = T> + Copy> Add for &Polynomial<T> {
+    type Output = Polynomial<T>;
+
+    fn add(self, other: Self) -> Polynomial<T> {
+        let min_len = std::cmp::min(self.coef.len(), other.coef.len());
+        let mut sum = Vec::with_capacity(min_len);
+
+        for i in 0..min_len {
+            sum.push(self.coef[i] + other.coef[i]);
+        }
+
+        if self.coef.len() > other.coef.len() {
+            sum.extend_from_slice(&self.coef[min_len..]);
+        } else {
+            sum.extend_from_slice(&other.coef[min_len..]);
+        }
+
+        Polynomial::new(sum)
     }
 }
 
@@ -237,6 +232,24 @@ impl<T: Mul<Output = T> + Copy + Add<Output = T> + Default> Mul<Polynomial<T>> f
     }
 }
 
+impl<'a, T: Mul<Output = T> + Copy + Add<Output = T> + Default> Mul<&'a Polynomial<T>>
+    for &'a Polynomial<T>
+{
+    type Output = Polynomial<T>;
+
+    fn mul(self, other: Self) -> Self::Output {
+        let dim_result = self.coef.len() + other.coef.len();
+        let mut coef = vec![T::default(); dim_result];
+        for i in 0..self.coef.len() {
+            for j in 0..other.coef.len() {
+                coef[i + j] = coef[i + j] + self.coef[i] * other.coef[j];
+            }
+        }
+
+        Polynomial::new(coef)
+    }
+}
+
 impl<T: std::fmt::Display> std::fmt::Display for Polynomial<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let coefs_with_symbol = self
@@ -272,6 +285,17 @@ impl<T> BorrowMut<Vec<T>> for Polynomial<T> {
     }
 }
 
+pub fn gen_random_polynomial(length: usize, bound: usize) -> Polynomial<i64> {
+    let mut coefs = vec![0; length];
+
+    let bound = bound as i64;
+    for i in 0..length {
+        coefs[i] = rand::random_range(0..=bound);
+    }
+
+    Polynomial::from_slice(&coefs)
+}
+
 // /// Borrowed `Polynomial`.
 // ///
 // /// Similar to `Polynomial` that wraps a vector for its implementation, `PolyRef` wraps a slice.
@@ -282,31 +306,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_division() {
-        let p1 = vec![
-            Complex::new(6.25, 0.0),
-            Complex::new(1.8, 0.0),
-            Complex::new(0.5, 0.0),
-            Complex::new(0.7, 0.0),
-            Complex::new(1.25, 0.0),
-            Complex::new(0.7, 0.0),
-            Complex::new(0.49, 0.0),
-        ];
-        let p2 = vec![
-            Complex::new(1.2, 0.0),
-            Complex::new(0.0, 0.0),
-            Complex::new(2.1, 0.0),
-            Complex::new(1.2, 0.0),
-            Complex::new(2.1, 0.0),
-        ];
+    fn test_div_rem() {
+        let p1 = Polynomial::from_slice(&[0, 0, 0, 5, 0, 0, 500]);
+        let p2 = Polynomial::from_slice(&[1, 0, 0, 0, 1]);
+        let (res, rem) = p1.div_rem(p2);
 
-        let poly_1 = Polynomial::new(p1);
-        let poly_2 = Polynomial::new(p2);
+        let expected_res = Polynomial::from_slice(&[0, 0, 500]);
+        assert_eq!(res, expected_res);
 
-        let (res, rem) = poly_1.div_rem(poly_2);
-        // let expected = (
-        //     vec![0.24761905, 0.2, 0.23333333],
-        //     vec![5.95285714, 1.56, -0.3, -0.01714286],
-        // );
+        let expected_rem = Polynomial::from_slice(&[0, 0, -500, 5]);
+        assert_eq!(rem, expected_rem);
     }
 }

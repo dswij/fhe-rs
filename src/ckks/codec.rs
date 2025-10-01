@@ -3,7 +3,6 @@ use std::f64::consts::PI;
 use std::str::FromStr;
 
 use nalg::DMatrix;
-use nalg::DVector;
 use nalg::LU;
 
 use crate::poly::Polynomial;
@@ -12,23 +11,11 @@ use crate::poly::Polynomial;
 pub struct Codec {
     N: usize,
     delta: f64,
-    xi: Complex<f64>,
-    basis: Vec<Complex<f64>>,
 }
 
 impl Codec {
     pub fn new(N: usize, delta: f64) -> Self {
-        let xi = Complex::from_polar(1.0, 2.0 * PI / (N as f64));
-        let vandermonde = vandermonde(xi, N);
-
-        let basis = DMatrix::from_vec(N, N, vandermonde).transpose().data.into();
-
-        Self {
-            N,
-            delta,
-            xi,
-            basis,
-        }
+        Self { N, delta }
     }
 
     pub fn encode(&self, b: Vec<Complex<f64>>) -> Polynomial<i64> {
@@ -148,27 +135,6 @@ mod test {
 
         assert_eq!(result, expected);
     }
-
-    // #[test]
-    // fn test_compute_basis() {
-    //     let input = vec!["192+256j", "128-64j", "128+64j", "192-256j"]
-    //         .into_iter()
-    //         .filter_map(|s| Complex::<f64>::from_str(s).ok())
-    //         .collect();
-    //     let codec = Codec::new(8, 64.0);
-    //     let result = codec.compute_on_basis(input);
-    //
-    //     // TODO: equal comparison in floating number, really?
-    //     assert_eq!(
-    //         result,
-    //         [
-    //             160.0,
-    //             90.5096679918781,
-    //             159.99999999999997,
-    //             45.25483399593886,
-    //         ]
-    //     );
-    // }
 
     #[test]
     fn test_encode_decode() {
