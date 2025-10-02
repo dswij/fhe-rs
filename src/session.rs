@@ -5,6 +5,12 @@ use crate::poly::gen_random_polynomial;
 use crate::poly::ring::*;
 use crate::poly::Polynomial;
 
+// TODO: Bootstrapping operations?
+// TODO: need to add a Bound
+// TODO: need to cleanup the Polynomial: implement in f64 maybe instead of i64?
+// TODO: add a borrowed polynomial
+// TODO: use Pow instead of copying/referencing polynomial
+
 pub struct CKKSParams {
     poly_degree: usize,
     q_0: usize,
@@ -48,54 +54,44 @@ pub struct Session {
 }
 
 impl Session {
-    fn encode(&self, pt: PlainText) -> Message {
-        let codec = Codec::new(self.params.poly_degree, self.params.delta as f64);
-        let inner = codec.encode(pt.0);
+    pub fn encode(&self, pt: PlainText) -> Message {
+        let inner = self.codec().encode(pt.0);
 
         Message(inner)
     }
 
-    fn decode(&self, m: Message) -> PlainText {
-        let codec = Codec::new(self.params.poly_degree, self.params.delta as f64);
-        let inner = codec.decode(m.0);
+    pub fn decode(&self, m: Message) -> PlainText {
+        let inner = self.codec().decode(m.0);
 
         PlainText(inner)
     }
 
-    fn encrypt(&self, m: Message) -> CipherText {
-        let ring = ResidualQuotientRing::cyclotomic(self.params.poly_degree, self.params.q_0);
+    pub fn encrypt(&self, m: Message) -> CipherText {
+        let ring = self.ring();
 
         CipherText(ring.add(&m.0, &self.pk.0), self.pk.1.clone())
     }
 
-    fn decrypt(&self, c: CipherText) -> Message {
-        // TODO: probably just store the ring too
-        let ring = ResidualQuotientRing::cyclotomic(self.params.poly_degree, self.params.q_0);
+    pub fn decrypt(&self, c: CipherText) -> Message {
+        let ring = self.ring();
 
         Message(c.0 + ring.mul(&c.1, &self.sk.0))
     }
 
-    fn add_cipher(&self, lhs: CipherText, rhs: CipherText) -> CipherText {
-        let ring = ResidualQuotientRing::cyclotomic(self.params.poly_degree, self.params.q_0);
+    pub fn add_cipher(&self, lhs: CipherText, rhs: CipherText) -> CipherText {
+        let ring = self.ring();
 
         CipherText(ring.add(&lhs.0, &rhs.0), ring.add(&lhs.1, &rhs.1))
     }
 
-    fn mul_cipher(&self, lhs: CipherText, rhs: CipherText) -> CipherText {
-        println!("lhs: {}", lhs.0);
-        println!("rhs: {}", rhs.0);
-        println!("lhs * rhs: {}", &lhs.0 * &rhs.0);
-        let ring = ResidualQuotientRing::cyclotomic(self.params.poly_degree, self.params.q_0);
-        println!("quotient: {}", ring.ring.quotient);
+    pub fn mul_cipher(&self, lhs: CipherText, rhs: CipherText) -> CipherText {
+        let ring = self.ring();
         let c0 = ring.mul(&lhs.0, &rhs.0);
-        println!("c__0: {}", c0);
         let c1 = ring.mul(&lhs.0, &rhs.1) + ring.mul(&lhs.1, &rhs.0);
-        println!("c__1: {}", c1);
 
         // TODO: so messy here
         // need something to do with i64 -> f64; maybe just use f64 instead?
         let c2 = ring.mul(&lhs.1, &rhs.1);
-        println!("c__2: {}", c2);
         let c2 = (
             Polynomial::new(
                 ring.mul(&self.ek.0, &c2)
@@ -119,7 +115,6 @@ impl Session {
             .map(|e| ((e as f64) / self.params.delta as f64).round() as i64)
             .collect();
         let c0 = Polynomial::new(c0);
-        println!("c_mul_0: {}", c0);
 
         let c1: Vec<i64> = (c1 + c2.1)
             .coef
@@ -127,30 +122,16 @@ impl Session {
             .map(|e| ((e as f64) / self.params.delta as f64).round() as i64)
             .collect();
         let c1 = Polynomial::new(c1);
-        println!("c_mul_1: {}", c1);
 
         CipherText(c0, c1)
     }
 
-    fn mul_cipher_and_decrypt(&self, lhs: CipherText, rhs: CipherText) -> Message {
-        let ring = ResidualQuotientRing::cyclotomic(self.params.poly_degree, self.params.q_0);
-        let c0 = ring.mul(&lhs.0, &rhs.0);
-        let c1 = ring.mul(&lhs.0, &rhs.1) + ring.mul(&lhs.1, &rhs.0);
+    fn ring(&self) -> ResidualQuotientRing {
+        ResidualQuotientRing::cyclotomic(self.params.poly_degree, self.params.q_0)
+    }
 
-        // TODO: so messy here
-        // need something to do with i64 -> f64; maybe just use f64 instead?
-        let c2 = ring.mul(&lhs.1, &rhs.1);
-
-        let result =
-            c0 + ring.mul(&c1, &self.sk.0) + ring.mul(&c2, &ring.mul(&self.sk.0, &self.sk.0));
-
-        Message(Polynomial::new(
-            result
-                .coef
-                .into_iter()
-                .map(|e| ((e as f64) / self.params.delta as f64).round() as i64)
-                .collect(),
-        ))
+    fn codec(&self) -> Codec {
+        Codec::new(self.params.poly_degree, self.params.delta as f64)
     }
 }
 
@@ -158,7 +139,8 @@ impl Session {
 pub struct SecretKey(Polynomial<i64>);
 
 impl SecretKey {
-    fn generate_random() -> Self {
+    // TODO: fix this -- need some length cleanup
+    pub fn generate_random() -> Self {
         Self(gen_random_polynomial(1, 1))
     }
 }
@@ -168,9 +150,8 @@ pub struct PublicKey(Polynomial<i64>, Polynomial<i64>);
 
 impl PublicKey {
     fn generate_from_secret_key(s: &SecretKey, q: usize, N: usize) -> Self {
-        let a = Polynomial::from_slice(&[1, 0, 0, 0]);
+        let a = gen_random_polynomial(N, q);
         let ring = ResidualQuotientRing::cyclotomic(N, q);
-        // let pk_1 = ring.add(&ring.mul(&a, &s.0), &e);
         let pk_1 = ring.mul(&a, &s.0);
 
         Self(pk_1.scale(-1), a)
@@ -178,19 +159,19 @@ impl PublicKey {
 }
 
 #[derive(Debug, Clone)]
-struct CipherText(Polynomial<i64>, Polynomial<i64>);
+pub struct CipherText(Polynomial<i64>, Polynomial<i64>);
 
 #[derive(Debug, Clone)]
-struct Message(Polynomial<i64>);
+pub struct Message(Polynomial<i64>);
 
 #[derive(Debug, Clone)]
-struct PlainText(Vec<Complex<f64>>);
+pub struct PlainText(Vec<Complex<f64>>);
 
-struct EvalKey(Polynomial<i64>, Polynomial<i64>);
+pub struct EvalKey(Polynomial<i64>, Polynomial<i64>);
 
 impl EvalKey {
     fn generate_from_secret_key(s: &SecretKey, q: usize, N: usize, p: usize) -> Self {
-        let a = Polynomial::from_slice(&[1, 0, 0, 0]);
+        let a = gen_random_polynomial(N, q);
         let ring = ResidualQuotientRing::cyclotomic(N, q);
 
         let ek_1 = ring.add(
@@ -198,7 +179,6 @@ impl EvalKey {
             &ring.mul(&s.0, &s.0).scale(p as i64),
         );
 
-        println!("EK: {}, {}", ek_1, a);
         Self(ek_1, a)
     }
 }
@@ -206,6 +186,9 @@ impl EvalKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::cmp::PartialOrd;
+    use std::ops::Sub;
 
     use num::Complex;
 
@@ -237,7 +220,7 @@ mod tests {
             Complex::new(1.9917670010221684, -0.9973980899785868),
         ];
 
-        assert_eq!(decoded.0, expected);
+        assert_complex_eq(decoded.0.into_iter(), expected.into_iter(), 0.001);
     }
 
     #[test]
@@ -273,10 +256,9 @@ mod tests {
             Complex::new(3.983534002044337, -1.9947961799571736),
         ];
 
-        assert_eq!(decoded.0, expected);
+        assert_complex_eq(decoded.0.into_iter(), expected.into_iter(), 0.001);
     }
 
-    // WHAT WHY
     #[test]
     fn test_mul() {
         let params = CKKSParams {
@@ -300,37 +282,31 @@ mod tests {
         let c1 = session.encrypt(msg1);
         let c2 = session.encrypt(msg2);
 
-        println!(
-            "mul_cipher_and_decrypt: {}",
-            session.mul_cipher_and_decrypt(c1.clone(), c2.clone()).0
-        );
-
-        println!(
-            "mul_cipher_and_decrypt_decoded: {:?}",
-            session
-                .decode(session.mul_cipher_and_decrypt(c1.clone(), c2.clone()))
-                .0
-        );
-
         let c_mul = session.mul_cipher(c1, c2);
 
         let decrypted = session.decrypt(c_mul);
-        println!("decrypted: {}", decrypted.0);
-        println!(
-            "huh: {}",
-            decrypted
-                .0
-                .div_rem(Polynomial::from_slice(&[1, 0, 0, 0, 1]))
-                .1
-        );
-
-        let expected = vec![Complex::new(9.0, 16.0), Complex::new(4.0, 1.0)];
-        let pt = PlainText(expected);
-        println!("expected: {}", session.encode(pt).0);
-
         let decoded = session.decode(decrypted);
-        println!("decoded: {:?}", decoded.0);
 
-        assert!(false);
+        let expected = vec![
+            Complex::new(-6.999465913858007, 24.00114644388103),
+            Complex::new(2.999465913858012, -3.9998301186189744),
+        ];
+
+        assert_complex_eq(decoded.0.into_iter(), expected.into_iter(), 0.001);
+    }
+
+    fn assert_complex_eq<T>(
+        x: impl ExactSizeIterator<Item = Complex<T>>,
+        y: impl ExactSizeIterator<Item = Complex<T>>,
+        epsilon: T,
+    ) where
+        T: Sub + PartialOrd + Clone + num::Num + num::Float,
+        <T as Sub>::Output: PartialOrd<T>,
+    {
+        assert_eq!(x.len(), y.len(), "Object have different length");
+
+        x.into_iter()
+            .zip(y.into_iter())
+            .for_each(|(a, b)| assert!((a - b).norm() < epsilon));
     }
 }

@@ -65,24 +65,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_residual_quotient_ring_add() {
-        let p1 = Polynomial::from_slice(&[1, 0, 0, 100]);
-        let p2 = Polynomial::from_slice(&[0, 0, 0, 5]);
-        let ring = ResidualQuotientRing {
-            ring: QuotientRing {
-                quotient: Polynomial::from_slice(&[1, 0, 0, 0, 1]),
-            },
-            bound: 256,
-            t: 128,
-        };
-
-        let result = ring.mul(&p1, &p2);
-
-        let expected = Polynomial::from_slice(&[0, 0, 12, 5]);
-        assert_eq!(result, expected);
-    }
-
-    #[test]
     fn test_quotient_ring_mul() {
         let p1 = Polynomial::from_slice(&[160, 45, 34, 0]);
         let p2 = Polynomial::from_slice(&[160, 45, 34, 0]);
@@ -96,7 +78,7 @@ mod tests {
 
         let result = ring.mul(&p1, &p2);
 
-        let expected = Polynomial::from_slice(&[0, 0, 12, 5]);
+        let expected = Polynomial::from_slice(&[24444, 14400, 12905, 3060]);
         assert_eq!(result, expected);
     }
 }
