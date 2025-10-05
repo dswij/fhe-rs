@@ -125,7 +125,6 @@ impl Polynomial<i64> {
         self.coef.iter_mut().for_each(|e| *e = *e + q);
     }
 
-    // Mod all the coefficient
     pub fn coef_mod(&mut self, q: i64) {
         self.coef.iter_mut().for_each(|e| *e = (*e).rem_euclid(q));
     }

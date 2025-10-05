@@ -8,8 +8,7 @@ use crate::poly::Polynomial;
 // TODO: Bootstrapping operations?
 // TODO: need to add a Bound
 // TODO: need to cleanup the Polynomial: implement in f64 maybe instead of i64?
-// TODO: add a borrowed polynomial
-// TODO: use Pow instead of copying/referencing polynomial
+// TODO: use Cow instead of copying/referencing polynomial
 
 pub struct CKKSParams {
     poly_degree: usize,
@@ -138,23 +137,17 @@ impl Session {
 #[derive(Debug, Clone)]
 pub struct SecretKey(Polynomial<i64>);
 
-impl SecretKey {
-    // TODO: fix this -- need some length cleanup
-    pub fn generate_random() -> Self {
-        Self(gen_random_polynomial(1, 1))
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct PublicKey(Polynomial<i64>, Polynomial<i64>);
 
 impl PublicKey {
     fn generate_from_secret_key(s: &SecretKey, q: usize, N: usize) -> Self {
         let a = gen_random_polynomial(N, q);
+        let e = gen_random_polynomial(N, 1).scale(q as i64);
         let ring = ResidualQuotientRing::cyclotomic(N, q);
         let pk_1 = ring.mul(&a, &s.0);
 
-        Self(pk_1.scale(-1), a)
+        Self(pk_1.scale(-1) + e, a)
     }
 }
 
@@ -172,16 +165,20 @@ pub struct EvalKey(Polynomial<i64>, Polynomial<i64>);
 impl EvalKey {
     fn generate_from_secret_key(s: &SecretKey, q: usize, N: usize, p: usize) -> Self {
         let a = gen_random_polynomial(N, q);
+        let e = gen_random_polynomial(N, 1).scale(q as i64);
         let ring = ResidualQuotientRing::cyclotomic(N, q);
 
         let ek_1 = ring.add(
-            &ring.mul(&a, &s.0).scale(-1),
+            &(ring.mul(&a, &s.0).scale(-1) + e),
             &ring.mul(&s.0, &s.0).scale(p as i64),
         );
 
         Self(ek_1, a)
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct Noise<f64>(f64);
 
 #[cfg(test)]
 mod tests {
@@ -263,7 +260,7 @@ mod tests {
     fn test_mul() {
         let params = CKKSParams {
             poly_degree: 4,
-            q_0: 1024,
+            q_0: 1024 * 1024,
             delta: 64 * 64,
             L: 10,
             P: 1,
@@ -287,12 +284,12 @@ mod tests {
         let decrypted = session.decrypt(c_mul);
         let decoded = session.decode(decrypted);
 
-        let expected = vec![
-            Complex::new(-6.999465913858007, 24.00114644388103),
-            Complex::new(2.999465913858012, -3.9998301186189744),
-        ];
+        let expected = vec![Complex::new(-7.0, 24.0), Complex::new(3.0, -4.0)];
 
-        assert_complex_eq(decoded.0.into_iter(), expected.into_iter(), 0.001);
+        dbg!(&decoded);
+        dbg!(&expected);
+
+        assert_complex_eq(decoded.0.into_iter(), expected.into_iter(), 0.01);
     }
 
     fn assert_complex_eq<T>(

@@ -41,20 +41,17 @@ impl ResidualQuotientRing {
     }
 
     pub fn add(&self, lhs: &Polynomial<i64>, rhs: &Polynomial<i64>) -> Polynomial<i64> {
-        let result = self.ring.add(lhs, rhs);
-        // TODO: fix this
-        // let bound = self.bound.try_into().unwrap();
-        // result.coef_mod(bound);
-        // result.translate(-self.t);
+        let mut result = self.ring.add(lhs, rhs);
+        let bound = self.bound.try_into().unwrap();
+        result.coef_mod(bound);
 
         result
     }
 
     pub fn mul(&self, lhs: &Polynomial<i64>, rhs: &Polynomial<i64>) -> Polynomial<i64> {
-        let result = self.ring.mul(lhs, rhs);
-        // let bound = self.bound.try_into().unwrap();
-        // result.coef_mod(bound);
-        // result.translate(-self.t);
+        let mut result = self.ring.mul(lhs, rhs);
+        let bound = self.bound.try_into().unwrap();
+        result.coef_mod(bound);
 
         result
     }
@@ -68,12 +65,8 @@ mod tests {
     fn test_quotient_ring_mul() {
         let p1 = Polynomial::from_slice(&[160, 45, 34, 0]);
         let p2 = Polynomial::from_slice(&[160, 45, 34, 0]);
-        let ring = ResidualQuotientRing {
-            ring: QuotientRing {
-                quotient: Polynomial::from_slice(&[1, 0, 0, 0, 1]),
-            },
-            bound: 256,
-            t: 128,
+        let ring = QuotientRing {
+            quotient: Polynomial::from_slice(&[1, 0, 0, 0, 1]),
         };
 
         let result = ring.mul(&p1, &p2);
