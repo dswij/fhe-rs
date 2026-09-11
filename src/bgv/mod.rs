@@ -1,6 +1,8 @@
-use crate::ckks::codec::Codec;
-use num::Complex;
+//! BGV Scheme
+//!
+//! Implementation reference: https://faculty.kfupm.edu.sa/coe/mfelemban/SEC595/References/Introduction%20to%20the%20BGV%20FHE%20Scheme.pdf
 
+// IMPORTANT NOTE TO SELF: that the message space is R_t.
 use crate::poly::gen_random_polynomial;
 use crate::poly::ring::*;
 use crate::poly::Polynomial;
@@ -43,29 +45,33 @@ pub struct Session {
 
 impl Session {
     pub fn encrypt(&self, m: Message) -> CipherText {
-        let ring = self.ring();
+        let ring = self.ring_q();
 
         CipherText(ring.add(&m.0, &self.pk.0), self.pk.1.clone())
     }
 
     pub fn decrypt(&self, c: CipherText) -> Message {
-        let ring = self.ring();
+        let ring = self.ring_q();
 
-        Message(c.0 + ring.mul(&c.1, &self.sk.0))
+        let mut msg = c.0 + ring.mul(&c.1, &self.sk.0);
+        msg.coef_mod(self.params.t as i64);
+
+        Message(msg)
     }
 
     pub fn add_cipher(&self, lhs: CipherText, rhs: CipherText) -> CipherText {
-        let ring = self.ring();
+        let ring = self.ring_q();
 
         CipherText(ring.add(&lhs.0, &rhs.0), ring.add(&lhs.1, &rhs.1))
     }
 
+    // TODO
     pub fn mul_cipher(&self, lhs: CipherText, rhs: CipherText) -> CipherText {
         todo!()
     }
 
-    fn ring(&self) -> ResidualQuotientRing {
-        ResidualQuotientRing::cyclotomic(self.params.N, self.params.t)
+    fn ring_q(&self) -> ResidualQuotientRing {
+        ResidualQuotientRing::cyclotomic(self.params.N, self.params.Q)
     }
 }
 
@@ -78,11 +84,12 @@ pub struct PublicKey(Polynomial<i64>, Polynomial<i64>);
 impl PublicKey {
     fn generate_from_secret_key(s: &SecretKey, q: usize, N: usize, t: usize) -> Self {
         let a = gen_random_polynomial(N, q);
-        let e = gen_random_polynomial(1, 1).scale(t as i64);
-        let ring = ResidualQuotientRing::cyclotomic(N, t);
+        let e = gen_random_polynomial(N, 1);
+
+        let ring = ResidualQuotientRing::cyclotomic(N, q).ring;
         let pk_1 = ring.mul(&a, &s.0);
 
-        Self(pk_1.scale(-1) + e, a)
+        Self(pk_1.scale(-1) + e.scale(t as i64), a)
     }
 }
 
@@ -107,16 +114,11 @@ pub fn gen_R2(length: usize) -> Polynomial<i64> {
 mod tests {
     use super::*;
 
-    use std::cmp::PartialOrd;
-    use std::ops::Sub;
-
-    use num::Complex;
-
     #[test]
     fn test_encrypt_decrypt() {
         let params = BGVParams {
             N: 4,
-            t: 1024,
+            t: 8,
             Q: 1024,
             L: 10,
             P: 1024,
@@ -129,16 +131,14 @@ mod tests {
         let encrypted = session.encrypt(msg);
         let decrypted = session.decrypt(encrypted);
 
-        assert!(false);
-
-        // assert_complex_eq(decoded.0.into_iter(), expected.into_iter(), 0.001);
+        assert_eq!(decrypted.0, Polynomial::from_slice(&[5, 4]));
     }
 
     #[test]
     fn test_addition() {
         let params = BGVParams {
             N: 4,
-            t: 1,
+            t: 8,
             Q: 1024,
             L: 10,
             P: 1024,
@@ -146,7 +146,7 @@ mod tests {
         let builder = SessionBuilder::new(params);
         let session = builder.generate_new();
 
-        let input = Polynomial::from_slice(&[5, 4]);
+        let input = Polynomial::from_slice(&[1, 2]);
         let msg = Message(input);
         let cipher_1 = session.encrypt(msg);
         let cipher_2 = cipher_1.clone();
@@ -154,23 +154,29 @@ mod tests {
         let c_sum = session.add_cipher(cipher_1, cipher_2);
         let decrypted = session.decrypt(c_sum);
 
-        dbg!(&decrypted);
-
-        assert!(false);
+        assert_eq!(decrypted.0, Polynomial::from_slice(&[2, 4]));
     }
 
-    fn assert_complex_eq<T>(
-        x: impl ExactSizeIterator<Item = Complex<T>>,
-        y: impl ExactSizeIterator<Item = Complex<T>>,
-        epsilon: T,
-    ) where
-        T: Sub + PartialOrd + Clone + num::Num + num::Float,
-        <T as Sub>::Output: PartialOrd<T>,
-    {
-        assert_eq!(x.len(), y.len(), "Object have different length");
+    #[test]
+    fn test_mul() {
+        let params = BGVParams {
+            N: 4,
+            t: 8,
+            Q: 1024,
+            L: 10,
+            P: 1024,
+        };
+        let builder = SessionBuilder::new(params);
+        let session = builder.generate_new();
 
-        x.into_iter()
-            .zip(y.into_iter())
-            .for_each(|(a, b)| assert!((a - b).norm() < epsilon));
+        let input = Polynomial::from_slice(&[1, 2]);
+        let msg = Message(input);
+        let cipher_1 = session.encrypt(msg);
+        let cipher_2 = cipher_1.clone();
+
+        let c_sum = session.mul_cipher(cipher_1, cipher_2);
+        let decrypted = session.decrypt(c_sum);
+
+        assert_eq!(decrypted.0, Polynomial::from_slice(&[2, 4]));
     }
 }

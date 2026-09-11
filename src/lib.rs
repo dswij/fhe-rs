@@ -1,8 +1,11 @@
-use poly::Polynomial;
-
 extern crate nalgebra as nalg;
 
+pub mod bfv;
 pub mod bgv;
 pub mod ckks;
+pub mod codec;
+
 pub mod dft;
 pub mod poly;
+
+use poly::Polynomial;
