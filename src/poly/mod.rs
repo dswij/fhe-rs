@@ -215,15 +215,25 @@ impl<T: Sub<Output = T> + Copy> Sub for Polynomial<T> {
     }
 }
 
-impl<T: Mul<Output = T> + Copy + Add<Output = T> + Default> Mul<Polynomial<T>> for Polynomial<T> {
-    type Output = Polynomial<T>;
+impl<T> Mul for Polynomial<T>
+where
+    T: Mul<Output = T> + Copy + std::ops::Add<Output = T> + std::ops::Sub<Output = T> + Default,
+{
+    type Output = Self;
 
     fn mul(self, other: Self) -> Self {
-        let dim_result = self.coef.len() + other.coef.len();
-        let mut coef = vec![T::default(); dim_result];
+        let deg = self.coef.len();
+        let mut coef = vec![T::default(); deg];
+
         for i in 0..self.coef.len() {
             for j in 0..other.coef.len() {
-                coef[i + j] = coef[i + j] + self.coef[i] * other.coef[j];
+                let k = i + j;
+                let val = self.coef[i] * other.coef[j];
+                if k < deg {
+                    coef[k] = coef[k] + val;
+                } else {
+                    coef[k - deg] = coef[k - deg] - val;
+                }
             }
         }
 
@@ -231,8 +241,9 @@ impl<T: Mul<Output = T> + Copy + Add<Output = T> + Default> Mul<Polynomial<T>> f
     }
 }
 
-impl<'a, T: Mul<Output = T> + Copy + Add<Output = T> + Default> Mul<&'a Polynomial<T>>
-    for &'a Polynomial<T>
+impl<'a, T> Mul for &'a Polynomial<T>
+where
+    T: Mul<Output = T> + Copy + std::ops::Add<Output = T> + std::ops::Sub<Output = T> + Default,
 {
     type Output = Polynomial<T>;
 

@@ -1,4 +1,4 @@
-use crate::ckks::codec::Codec;
+use crate::ckks::Codec;
 use num::Complex;
 
 use crate::poly::gen_random_polynomial;
