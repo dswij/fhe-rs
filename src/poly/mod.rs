@@ -9,10 +9,12 @@ use num::Complex;
 pub mod ring;
 
 // TODO: Sparse polynomial is probably better off with other representation than a naive vector
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Polynomial<T> {
     pub coef: Vec<T>,
 }
+
+impl<T: PartialEq + Default> Eq for Polynomial<T> {}
 
 impl<T> Polynomial<T> {
     pub fn new(coef: Vec<T>) -> Self {
@@ -101,7 +103,7 @@ impl Polynomial<i64> {
 
         let divisor = Self::new(scaled_coefs).scale(1 / scale_val);
         if rhs.coef.len() > self.coef.len() {
-            return (self.clone(), Self::new_empty());
+            return (Self::new_empty(), self.clone());
         }
 
         let dim_result = self.coef.len() - rhs.coef.len();
@@ -129,15 +131,12 @@ impl Polynomial<i64> {
         self.coef.iter_mut().for_each(|e| *e = (*e).rem_euclid(q));
     }
 
-    fn trim_zeroes(self) -> Polynomial<i64> {
-        let trimmed: Vec<_> = self
-            .coef
-            .into_iter()
-            .rev()
-            .skip_while(|e| *e == 0)
-            .collect();
+    pub fn trim_zeroes(&self) -> Polynomial<i64> {
+        if let Some(idx) = self.coef.iter().rposition(|e| *e != 0) {
+            return Self::new(self.coef[0..idx + 1].to_vec());
+        }
 
-        Self::new(trimmed)
+        Self::new(self.coef.clone())
     }
 }
 
@@ -248,15 +247,22 @@ where
     type Output = Polynomial<T>;
 
     fn mul(self, other: Self) -> Self::Output {
-        let dim_result = self.coef.len() + other.coef.len();
-        let mut coef = vec![T::default(); dim_result];
+        let deg = self.coef.len();
+        let mut coef = vec![T::default(); deg];
+
         for i in 0..self.coef.len() {
             for j in 0..other.coef.len() {
-                coef[i + j] = coef[i + j] + self.coef[i] * other.coef[j];
+                let k = i + j;
+                let val = self.coef[i] * other.coef[j];
+                if k < deg {
+                    coef[k] = coef[k] + val;
+                } else {
+                    coef[k - deg] = coef[k - deg] - val;
+                }
             }
         }
 
-        Polynomial::new(coef)
+        Polynomial { coef }
     }
 }
 
@@ -300,7 +306,7 @@ pub fn gen_random_polynomial(length: usize, bound: usize) -> Polynomial<i64> {
 
     let bound = bound as i64;
     for i in 0..length {
-        coefs[i] = rand::random_range(0..=bound);
+        coefs[i] = rand::random_range(0..bound);
     }
 
     Polynomial::from_slice(&coefs)

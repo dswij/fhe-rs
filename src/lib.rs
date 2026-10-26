@@ -7,5 +7,6 @@ pub mod codec;
 
 pub mod dft;
 pub mod poly;
+pub mod sample;
 
 use poly::Polynomial;

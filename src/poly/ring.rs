@@ -21,7 +21,7 @@ impl QuotientRing {
 pub struct ResidualQuotientRing {
     pub ring: QuotientRing,
     pub bound: usize,
-    t: i64,
+    // t: i64,
 }
 
 impl ResidualQuotientRing {
@@ -36,22 +36,20 @@ impl ResidualQuotientRing {
         Self {
             ring,
             bound,
-            t: bound.div_ceil(2).try_into().unwrap(),
+            // t: bound.div_ceil(2).try_into().unwrap(),
         }
     }
 
     pub fn add(&self, lhs: &Polynomial<i64>, rhs: &Polynomial<i64>) -> Polynomial<i64> {
         let mut result = self.ring.add(lhs, rhs);
-        let bound = self.bound.try_into().unwrap();
-        result.coef_mod(bound);
+        result.coef_mod(self.bound as i64);
 
         result
     }
 
     pub fn mul(&self, lhs: &Polynomial<i64>, rhs: &Polynomial<i64>) -> Polynomial<i64> {
         let mut result = self.ring.mul(lhs, rhs);
-        let bound = self.bound.try_into().unwrap();
-        result.coef_mod(bound);
+        result.coef_mod(self.bound as i64);
 
         result
     }
